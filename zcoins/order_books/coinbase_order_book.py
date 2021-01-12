@@ -20,12 +20,23 @@ class _CoinbaseSingleProductOrderBook(SingleProductOrderBook):
 class CoinbaseMultiProductOrderBook(MultiProductOrderBook):
   def __init__(self, exchange: ExchangeProductInfo,
                websocket_addr=CoinbaseWebsocket.PROD_ADDRESS,
+               websocket: CoinbaseWebsocket = None,
                product_ids: list[Text] = None):
+    """Initializes the MultiProductOrderBook tracking Coinbase products.
+
+    If a websocket is supplied, this class *expects* that websocket will already be open, or this class will wait until
+    it is Open.
+    """
     self.exchange = exchange
     if product_ids is None:
       product_ids = []
     super().__init__(product_ids=product_ids)
-    self.internal_order_book = CoinbaseOrderBook.make_order_book(product_ids=product_ids, websocket_addr=websocket_addr)
+    if websocket is not None:
+      self.internal_order_book = CoinbaseOrderBook(websocket)
+      websocket.wait_for_open()
+    else:
+      self.internal_order_book = CoinbaseOrderBook.make_order_book(product_ids=product_ids,
+                                                                   websocket_addr=websocket_addr)
     self._post_subclass_init()
 
   def make_single_product_order_book(self, product_id: Text) -> SingleProductOrderBook:

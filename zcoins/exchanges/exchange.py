@@ -1,30 +1,51 @@
 # This file contains the interface that should be implemented by an exchange.
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Text
+from dataclasses import dataclass
+from typing import Text, Callable, Union
+
+from .exchange_data import OrderSide, OrderReport, OrderType, Product, TickerMessage
 
 
 class ExchangeProductInfo(ABC):
   @classmethod
   @abstractmethod
-  def make_product_id(cls, base_currency, quote_currency):
+  def make_product_id(cls, base_currency, quote_currency) -> Text:
     pass
 
-  @abstractmethod
-  def get_quote_currency(self, product_id: Text):
+  def get_quote_currency(self, product_id: Text) -> Text:
     """Given a product_id, return the quote_currency."""
+    return self.get_product(product_id).quote_currency
+
+  def get_base_currency(self, product_id: Text) -> Text:
+    """Given a product_id, return the base_currency."""
+    return self.get_product(product_id).base_currency
+
+  @abstractmethod
+  def get_all_products(self) -> list[Product]:
     pass
 
   @abstractmethod
-  def get_base_currency(self, product_id: Text):
-    """Given a product_id, return the base_currency."""
+  def get_product(self, product_id: Text) -> Product:
     pass
 
 
 class Exchange(ExchangeProductInfo, ABC):
   """Contains information about an exchange."""
+
   def __init__(self, name: Text, order_books):
     self.name = name
     self.order_books = order_books
+
+  @dataclass
+  class _TickerCallback:
+    callback: Callable[[Union[Exchange, AuthenticatedExchange], TickerMessage], None]
+    product_matcher: Product = None  # By Default, this matches all products.
+
+  @abstractmethod
+  def add_ticker_callback(self, callback: Callable[[Exchange, TickerMessage], None]) -> Text:
+    """Adds a callback function to this exchange."""
 
   def get_product_ids(self):
     """Get all product ids available on this exchange, this is not necessarily all *available* products, but only the
@@ -32,6 +53,7 @@ class Exchange(ExchangeProductInfo, ABC):
     return self.order_books
 
   def add_order_book(self, product_id: Text):
+    """Adds an order book"""
     return self.order_books.add_order_book(product_id)
 
   def get_all_order_books(self):
@@ -53,3 +75,25 @@ class Exchange(ExchangeProductInfo, ABC):
   def get_order_book_by_currencies(self, base_currency, quote_currency):
     """Returns a SingleProductOrderBook for the given base and quote currencies."""
     return self.get_order_book(self.make_product_id(base_currency=base_currency, quote_currency=quote_currency))
+
+
+class AuthenticatedExchange(Exchange, ABC):
+  """Contains an exchange that you can make trades on."""
+
+  def __init__(self, name: Text, order_books):
+    super().__init__(name, order_books)
+
+  @abstractmethod
+  def cancel_order(self, order_id: Text, product_id: Text = None):
+    """Cancel an order with exchange-provided order id."""
+    pass
+
+  @abstractmethod
+  def limit_order(self, product_id: Text, side: OrderSide, price, size) -> OrderReport:
+    """Posts a limit order."""
+    pass
+
+  @abstractmethod
+  def market_order(self, product_id: Text, side: OrderSide, size=None, funds=None) -> OrderReport:
+    """Posts a market order."""
+    pass
