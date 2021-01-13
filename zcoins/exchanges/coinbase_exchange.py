@@ -32,7 +32,7 @@ class CoinbaseExchangeProductInfo(ExchangeProductInfo):
     return Product(product_id=json_message['id'], quote_currency=json_message['quote_currency'],
                    base_currency=json_message['base_currency'])
 
-  def product_matches(self, product_id: Text, product: Product, full_match = False):
+  def product_matches(self, product_id: Text, product: Product, full_match=False):
     if full_match:
       return self.get_product(product_id) == product
     else:
@@ -118,9 +118,18 @@ class CoinbaseAuthenticatedExchange(CoinbaseExchange, AuthenticatedExchange):
   def __init__(self, product_ids: list[Text] = None,
                rest_url: Text = PublicClient.PROD_URL,
                websocket_addr: Text = CoinbaseWebsocket.PROD_ADDRESS,
+               authenticated_client: AuthenticatedClient = None,
+               websocket: CoinbaseWebsocket = None,
                api_key=None, api_secret=None, passphrase=None):
-    self.client = AuthenticatedClient(rest_url=rest_url, api_key=api_key, api_secret=api_secret, passphrase=passphrase)
-    self.websocket = CoinbaseWebsocket(websocket_addr=websocket_addr, products_to_listen=product_ids)
+    if authenticated_client:
+      self.client = authenticated_client
+    else:
+      self.client = AuthenticatedClient(rest_url=rest_url, api_key=api_key, api_secret=api_secret,
+                                        passphrase=passphrase)
+    if websocket:
+      self.websocket = websocket
+    else:
+      self.websocket = CoinbaseWebsocket(websocket_addr=websocket_addr, products_to_listen=product_ids)
     self.websocket.start_websocket_in_thread()
     super().__init__(product_ids)
 
