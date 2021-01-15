@@ -9,7 +9,7 @@ from zcoinbase import PublicClient, AuthenticatedClient, CoinbaseWebsocket
 from zcoinbase import OrderSide as CoinbaseOrderSide
 
 from zcoins.order_books import CoinbaseMultiProductOrderBook
-from zcoins.exchanges import ExchangeProductInfo, Exchange, AuthenticatedExchange
+from zcoins.exchanges import ExchangeProductInfo, Exchange, AuthenticatedExchange, Account
 from .exchange_data import OrderSide, OrderReport, OrderType, TickerMessage, Product
 
 
@@ -129,8 +129,11 @@ class CoinbaseAuthenticatedExchange(CoinbaseExchange, AuthenticatedExchange):
     if websocket:
       self.websocket = websocket
     else:
-      self.websocket = CoinbaseWebsocket(websocket_addr=websocket_addr, products_to_listen=product_ids)
+      self.websocket = CoinbaseWebsocket(websocket_addr=websocket_addr, products_to_listen=product_ids, autostart=False)
     self.websocket.start_websocket_in_thread()
+    # Account IDs don't typically change in a session, so we can cache them when a request is made for an account in
+    # a currency.
+    self._account_id_by_currency = {account['currency']: account['id'] for account in self.client.get_all_accounts()}
     super().__init__(product_ids)
 
   @staticmethod
@@ -145,11 +148,10 @@ class CoinbaseAuthenticatedExchange(CoinbaseExchange, AuthenticatedExchange):
     pass
 
   def limit_order(self, product_id: Text, side: OrderSide, price, size) -> OrderReport:
-    return CoinbaseAuthenticatedExchange._translate_to_order_report(
-      self.client.limit_order(product_id=product_id,
+    order_response = self.client.limit_order(product_id=product_id,
                               side=CoinbaseAuthenticatedExchange._translate_order_side(
                                 side), price=price,
-                              size=size))
+                              size=size)
 
   def market_order(self, product_id: Text, side: OrderSide, size=None, funds=None) -> OrderReport:
     return CoinbaseAuthenticatedExchange._translate_to_order_report(
@@ -157,3 +159,25 @@ class CoinbaseAuthenticatedExchange(CoinbaseExchange, AuthenticatedExchange):
                                side=CoinbaseAuthenticatedExchange._translate_order_side(
                                  side),
                                size=size, funds=funds))
+
+  @staticmethod
+  def _response_to_account(json_response) -> Account:
+    return Account(account_id=json_response['id'],
+                   currency=json_response['currency'],
+                   balance=float(json_response['balance']),
+                   hold=float(json_response['hold']),
+                   available=float(json_response['available']))
+
+  def get_all_accounts(self) -> list[Account]:
+    return [CoinbaseAuthenticatedExchange._response_to_account(account) for account in self.client.get_all_accounts()]
+
+  def get_account(self, currency: Text = None, account_id: Text = None) -> Account:
+    if currency and account_id:
+      raise ValueError('it is invalid to specify both currency and account id.')
+    if currency:
+      if currency in self._account_id_by_currency:
+        account_id = self._account_id_by_currency[currency]
+      else:
+        raise ValueError('{} is not a valid currency in CoinbasePro.'.format(currency))
+    return CoinbaseAuthenticatedExchange._response_to_account(self.client.get_account(account_id=account_id))
+

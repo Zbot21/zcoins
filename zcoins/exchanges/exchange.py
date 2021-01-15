@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Text, Callable, Union
 
-from .exchange_data import OrderSide, OrderReport, OrderType, Product, TickerMessage
-
+from zcoins.exchanges import OrderSide, OrderReport, OrderType, Product, TickerMessage
+from zcoins.exchanges import Account
 
 class ExchangeProductInfo(ABC):
   @classmethod
@@ -82,6 +82,16 @@ class AuthenticatedExchange(Exchange, ABC):
 
   def __init__(self, name: Text, order_books):
     super().__init__(name, order_books)
+
+  @abstractmethod
+  def get_all_accounts(self) -> list[Account]:
+    """Get all the 'accounts' (currency balances) on this exchange."""
+    pass
+
+  @abstractmethod
+  def get_account(self, currency: Text = None, account_id: Text = None) -> Account:
+    """Can get an account either by account_id or by the currency, it's invalid to specify both."""
+    pass
 
   @abstractmethod
   def cancel_order(self, order_id: Text, product_id: Text = None):
